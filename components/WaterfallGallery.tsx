@@ -46,7 +46,8 @@ const WaterfallGallery: React.FC<WaterfallGalleryProps> = ({ columns = 3 }) => {
         setLoadingMore(true);
       }
 
-      const response = await fetch(`/api/images?page=${page}&limit=20&timeFilter=${timeFilter}`);
+      // 使用静态数据文件
+      const response = await fetch('/static-data.json');
       
       if (!response.ok) {
         throw new Error('获取图片失败');
@@ -54,13 +55,50 @@ const WaterfallGallery: React.FC<WaterfallGalleryProps> = ({ columns = 3 }) => {
 
       const data = await response.json();
       
-      if (append) {
-        setImages(prev => [...prev, ...data.images]);
-      } else {
-        setImages(data.images);
+      // 应用时间筛选
+      let filteredImages = data.images;
+      if (timeFilter !== 'all') {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+        const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const thisYear = new Date(now.getFullYear(), 0, 1);
+
+        filteredImages = data.images.filter((image: Image) => {
+          const mtime = new Date(image.modified);
+          const hasValidTime = mtime.getTime() > 0 && mtime.getFullYear() > 1970;
+          
+          if (timeFilter === 'no-time') return !hasValidTime;
+          if (timeFilter === 'has-time') return hasValidTime;
+          if (timeFilter === 'today') return hasValidTime && mtime >= today;
+          if (timeFilter === 'yesterday') return hasValidTime && mtime >= yesterday && mtime < today;
+          if (timeFilter === 'this-week') return hasValidTime && mtime >= thisWeek;
+          if (timeFilter === 'this-month') return hasValidTime && mtime >= thisMonth;
+          if (timeFilter === 'this-year') return hasValidTime && mtime >= thisYear;
+          return true;
+        });
       }
       
-      setPagination(data.pagination);
+      // 分页处理
+      const limit = 20;
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedImages = filteredImages.slice(startIndex, endIndex);
+      
+      if (append) {
+        setImages(prev => [...prev, ...paginatedImages]);
+      } else {
+        setImages(paginatedImages);
+      }
+      
+      setPagination({
+        currentPage: page,
+        totalPages: Math.ceil(filteredImages.length / limit),
+        totalImages: filteredImages.length,
+        hasNextPage: endIndex < filteredImages.length,
+        hasPrevPage: page > 1,
+      });
       setCurrentPage(page);
       
     } catch (err) {
@@ -123,24 +161,8 @@ const WaterfallGallery: React.FC<WaterfallGalleryProps> = ({ columns = 3 }) => {
   };
 
   const handleDelete = async (imageId: string) => {
-    if (window.confirm('确定要删除这张图片吗？')) {
-      try {
-        const response = await fetch(`/api/images/delete/${imageId}`, {
-          method: 'DELETE',
-        });
-        
-        if (response.ok) {
-          setImages(images.filter(img => img.id !== imageId));
-          const newSelected = new Set(selectedImages);
-          newSelected.delete(imageId);
-          setSelectedImages(newSelected);
-        } else {
-          console.error('删除失败');
-        }
-      } catch (error) {
-        console.error('删除失败:', error);
-      }
-    }
+    // 静态网站不支持删除功能
+    alert('静态网站不支持删除功能');
   };
 
   const handleBatchDownload = async () => {
@@ -154,15 +176,8 @@ const WaterfallGallery: React.FC<WaterfallGalleryProps> = ({ columns = 3 }) => {
   };
 
   const handleBatchDelete = async () => {
-    if (window.confirm(`确定要删除选中的 ${selectedImages.size} 张图片吗？`)) {
-      const selectedImageObjects = images.filter(img => selectedImages.has(img.id));
-      
-      for (const image of selectedImageObjects) {
-        await handleDelete(image.id);
-      }
-      
-      setSelectedImages(new Set());
-    }
+    // 静态网站不支持删除功能
+    alert('静态网站不支持删除功能');
   };
 
   const cancelMultiSelect = () => {

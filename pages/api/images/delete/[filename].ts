@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { createOSSClient } from '../../../../config/oss';
+import fs from 'fs';
+import path from 'path';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'DELETE') {
@@ -13,25 +14,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: '无效的文件名' });
     }
     
-    console.log('Attempting to delete file from OSS:', filename);
+    console.log('Attempting to delete local file:', filename);
     
-    // 创建OSS客户端
-    const client = createOSSClient();
-    
-    // 构建OSS对象名称（文件在102OLYMP/目录下）
-    const objectName = `102OLYMP/${filename}`;
+    // 构建本地文件路径
+    const filePath = path.join(process.cwd(), 'public', '102OLYMP', filename);
     
     try {
       // 检查文件是否存在
-      await client.head(objectName);
+      fs.accessSync(filePath, fs.constants.F_OK);
     } catch (error) {
       return res.status(404).json({ error: '文件不存在' });
     }
     
-    // 删除OSS中的文件
-    await client.delete(objectName);
+    // 删除本地文件
+    fs.unlinkSync(filePath);
     
-    console.log('File deleted successfully from OSS:', filename);
+    console.log('File deleted successfully from local storage:', filename);
     
     res.status(200).json({ 
       message: '文件删除成功',

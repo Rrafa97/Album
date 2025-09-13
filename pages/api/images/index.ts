@@ -1,6 +1,41 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { createOSSClient, isSupportedImage, parseImageInfo } from '../../../config/oss';
+import fs from 'fs';
+import path from 'path';
 import { IMAGE_RANGE_CONFIG } from '../../../config/imageRange';
+
+// 检查文件是否为支持的图片格式
+const isSupportedImage = (filename: string): boolean => {
+  if (!filename) return false;
+  
+  const lastDotIndex = filename.lastIndexOf('.');
+  if (lastDotIndex <= 0) return false;
+  
+  const ext = filename.toLowerCase().substring(lastDotIndex);
+  return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+};
+
+// 从文件名提取图片信息
+const parseImageInfo = (filename: string) => {
+  if (!filename) {
+    return {
+      filename: '',
+      nameWithoutExt: '',
+      extension: '',
+      url: '',
+    };
+  }
+  
+  const lastDotIndex = filename.lastIndexOf('.');
+  const ext = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
+  const nameWithoutExt = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
+  
+  return {
+    filename,
+    nameWithoutExt,
+    extension: ext,
+    url: `/102OLYMP/${filename}`,
+  };
+};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -9,64 +44,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const limitNum = parseInt(limit as string);
     const filterType = timeFilter as string;
     
-    console.log('Fetching images from OSS...');
+    console.log('Fetching images from local files...');
     
-    // 创建OSS客户端
-    const client = createOSSClient();
-    console.log('OSS Client created successfully');
+    // 读取本地文件目录
+    const imagesDir = path.join(process.cwd(), 'public', '102OLYMP');
     
     try {
-      // 获取OSS中的文件列表
-      const result = await client.list({
-        prefix: '102OLYMP/',
-        'max-keys': 1000, // 一次最多获取1000个文件
-      });
+      const files = fs.readdirSync(imagesDir);
+      console.log(`Found ${files.length} files in ${imagesDir}`);
       
-      console.log('OSS List API Response:', {
-        objectsCount: result.objects?.length || 0,
-        isTruncated: result.isTruncated,
-        nextMarker: result.nextMarker,
-        firstObject: result.objects?.[0] || null
-      });
-      
-      if (!result.objects || result.objects.length === 0) {
-        console.log('No objects found in 102OLYMP/ directory');
+      if (files.length === 0) {
+        console.log('No files found in 102OLYMP/ directory');
         return res.status(404).json({ 
           error: '在102OLYMP/目录下没有找到文件',
           debug: {
-            prefix: '102OLYMP/',
-            bucket: 'rrafa-album',
-            region: 'oss-cn-hangzhou'
+            directory: imagesDir
           }
         });
       }
     
-    // 获取当前时间用于筛选
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-    const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thisYear = new Date(now.getFullYear(), 0, 1);
+      // 获取当前时间用于筛选
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+      const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const thisYear = new Date(now.getFullYear(), 0, 1);
 
-    // 过滤出图片文件，按修改时间倒序排列
-    const imageFiles = (result.objects || [])
-      .filter((obj: any) => {
-        const filename = obj.name.split('/').pop() || '';
-        return isSupportedImage(filename) && !filename.startsWith('.');
-      })
-      .map((obj: any) => {
-        const filename = obj.name.split('/').pop() || '';
-        const mtime = new Date(obj.lastModified);
-        return {
-          filename,
-          objectName: obj.name,
-          mtime,
-          size: obj.size,
-          // 检查是否有有效的时间信息
-          hasValidTime: mtime.getTime() > 0 && mtime.getFullYear() > 1970
-        };
-      })
+      // 过滤出图片文件，按修改时间倒序排列
+      const imageFiles = files
+        .filter((filename: string) => {
+          return isSupportedImage(filename) && !filename.startsWith('.');
+        })
+        .map((filename: string) => {
+          const filePath = path.join(imagesDir, filename);
+          const stats = fs.statSync(filePath);
+          const mtime = stats.mtime;
+          return {
+            filename,
+            objectName: filename,
+            mtime,
+            size: stats.size,
+            // 检查是否有有效的时间信息
+            hasValidTime: mtime.getTime() > 0 && mtime.getFullYear() > 1970
+          };
+        })
       .filter((item: any) => {
         // 根据时间筛选条件过滤
         if (filterType === 'all') return true;
@@ -169,15 +191,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       });
       
-    } catch (ossError) {
-      console.error('OSS API Error:', ossError);
+    } catch (fsError) {
+      console.error('File System Error:', fsError);
       res.status(500).json({ 
-        error: 'OSS API调用失败',
-        details: ossError instanceof Error ? ossError.message : '未知OSS错误',
+        error: '读取本地文件失败',
+        details: fsError instanceof Error ? fsError.message : '未知文件系统错误',
         debug: {
-          bucket: 'rrafa-album',
-          prefix: '102OLYMP/',
-          region: 'oss-cn-hangzhou'
+          directory: imagesDir
         }
       });
     }
