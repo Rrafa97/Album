@@ -1,12 +1,12 @@
 import OSS from 'ali-oss';
 
-// OSS配置
+// OSS配置 - 从环境变量读取
 export const OSS_CONFIG = {
-  region: 'oss-cn-hangzhou',
-  accessKeyId: 'LTAI5tEXBKfHz4YRsuzJB1Uh',
-  accessKeySecret: 'JnXA5IpbMwf29PLbWU6IqFezYmwEE7',
-  bucket: 'rrafa-album',
-  endpoint: 'https://oss-cn-hangzhou.aliyuncs.com',
+  region: process.env.OSS_REGION || 'oss-cn-hangzhou',
+  accessKeyId: process.env.OSS_ACCESS_KEY_ID || '',
+  accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
+  bucket: process.env.OSS_BUCKET || 'rrafa-album',
+  endpoint: process.env.OSS_ENDPOINT || 'https://oss-cn-hangzhou.aliyuncs.com',
   // 图片存储路径前缀
   imagePrefix: '102OLYMP/',
   // 支持的图片格式
